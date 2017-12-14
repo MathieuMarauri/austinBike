@@ -50,7 +50,7 @@ trips <- trips[, .(trip_id, start_station_id, end_station_id, start_time,
 #' end_station_id: unique identifier of the end station
 #' start_time: timestamp of the beginning of the trip
 #' duration_minutes: duration of the trip in minutes
-#' month: month f the trip
+#' month: month of the trip
 #' year: year of the trip
 #' bike_id: unique identifier of the bike used for the trip
 #' subscriber_type: membership type
@@ -67,6 +67,11 @@ trips[, c('start_date', 'hour_of_day', 'weekday') := list(
   hour(start_time),
   weekdays(start_time)
 )]
+
+# correct month and year 
+trips[, month := month(start_time)]
+trips[, year := year(start_time)]
+
 
 # rearrange columns
 setcolorder(trips, c('trip_id', 'start_station_id', 'end_station_id', 'start_time', 
@@ -140,3 +145,4 @@ qualityCheck(data = weather,
 
 saveRDS(weather, 'data/processed/weather.rds')
 rm(weather, cols)
+
