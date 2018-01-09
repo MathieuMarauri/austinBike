@@ -6,8 +6,10 @@
 library('data.table') # dataset manipulation
 library('osmplotr') # extracting spatial data 
 library('ggplot2') # plots
-library('osrm') # shortest path 
-library('sf') # to convert from sp to sf object
+library('osrm') # get shortest path
+library('sf') # convert to sf object
+library('arules') # discretization
+library("magick") # to create animated plots
 
 
 # Import data -------------------------------------------------------------
@@ -39,12 +41,20 @@ austin_bbox <- get_bbox(latlon = c(min(station$longitude) - 0.02,
                                    max(station$latitude) + 0.02))
 
 # get the streets geometry
-austin_streets <- extract_osm_objects(key = 'highway', bbox = austin_bbox, return_type = 'line', sf = TRUE, geom_only = TRUE)
+austin_streets <- extract_osm_objects(key = 'highway', 
+                                      bbox = austin_bbox, 
+                                      return_type = 'line', 
+                                      sf = TRUE, 
+                                      geom_only = TRUE)
 
 # base map
 austin_map <- osm_basemap(bbox = austin_bbox, bg = 'gray20')
-austin_map <- add_osm_objects(map = austin_map, obj = austin_streets, col = 'gray40')
-print(austin_map)
+austin_map <- add_osm_objects(map = austin_map, 
+                              obj = austin_streets, 
+                              col = 'gray40')
+
+# clean session
+rm(austin_bbox, austin_streets)
 
 
 # Shortest path between bike stations -------------------------------------
@@ -72,14 +82,87 @@ print(austin_map)
 # saveRDS(shortest_path, 'data/shortest_path.rds')
 # rm(i, j, route, nrow_station)
 shortest_path <- readRDS('data/shortest_path.rds')
+names(shortest_path) <- c('start_station_id', 'end_station_id', 'duration', 
+                          'distance', 'geometry')
 
-# add paths to the map
-austin_map <- add_osm_objects(map = austin_map, obj = shortest_path, col = 'dodgerblue')
+
+# Merge trips and paths  --------------------------------------------------
+
+# average number of trips between all pairs of stations by hour
+
+# Create id in both tables to be able to merge.
+shortest_path$id <- paste(shortest_path$start_station_id, 
+                          shortest_path$end_station_id, 
+                          sep = '-')
+
+trips$id <- paste(trips$start_station_id, 
+                  trips$end_station_id, 
+                  sep = '-')
+
+# add geometry to trips
+setDT(shortest_path)
+trips <- merge(x = trips, 
+               y = shortest_path[, .(id, geometry)],
+               by = 'id',
+               all = FALSE)
+
+# creation of a color vector to pass to add_osm_object. First count is
+# discretized and then a color palette is used to as levels.
+createPalette <- colorRampPalette(c("dodgerblue", "white"))
+trips$color <- discretize(x = trips$count, 
+                          method = 'interval', 
+                          categories = 10, 
+                          labels = createPalette(10))
+
+# clena trips table and convert to sf object
+trips <- trips[, .(start_station_id, end_station_id, hour_of_day, color, geometry)]
+trips <- st_as_sf(trips)
+
+# clean session
+rm(createPalette, shortest_path)
+
+
+# Evolving map ------------------------------------------------------------
+
+# create one frame by hour. Add paths by color because ad_osm_objects accepts
+# only one value as color argument
+img <- image_graph(600, 340, res = 96)
+lapply(X = unique(trips$hour_of_day), 
+       FUN = function(hour){
+         data <- trips[trips$hour_of_day == hour, ]
+         map <- austin_map
+         for (color in unique(data$color)) {
+           object <- data[data$color == color,]
+           map <- add_osm_objects(map = map,
+                                  obj = object,
+                                  col = color)
+         }
+         print(map)
+       })
+dev.off()
+animation <- image_animate(img, fps = 2)
+print(animation)
+
+hour <- 1
+data <- trips[trips$hour_of_day == hour, ]
+# map <- austin_map
+for (color in unique(data$color)) {
+  austin_map <- add_osm_objects(map = austin_map,
+                                obj = data[data$color == color,],
+                                col = color)
+}
+print(austin_map)
+
+# some color are not present for some hour so a condition should be added before
+# add_osm_objects
+
+# add paths by color because ad_osm_objects accepts only one value as color
+# argument
+for (color in unique(trips$color)) {
+  austin_map <- add_osm_objects(map = austin_map,
+                                obj = trips[trips$color == color,],
+                                col = color)
+}
 
 # plot the map
 print(austin_map)
-
-
-
-
-
