@@ -7,6 +7,7 @@ library('data.table') # dataset manipulation
 library('osmplotr') # extracting spatial data 
 library('ggplot2') # plots
 library('osrm') # shortest path 
+library('sf') # to convert from sp to sf object
 
 
 # Import data -------------------------------------------------------------
@@ -31,8 +32,11 @@ station <- readRDS('data/processed/stations.rds')
 
 # plot a basic Austin map with the streets and the bike stations
 
-# get the Austin map, bbox from http://boundingbox.klokantech.com/
-austin_bbox <- get_bbox(latlon = c(-97.938468, 30.098609, -97.561402, 30.516919))
+# austin bbox dereived from min and max of station longitude and latitude
+austin_bbox <- get_bbox(latlon = c(min(station$longitude) - 0.02, 
+                                   min(station$latitude) - 0.02, 
+                                   max(station$longitude) + 0.02, 
+                                   max(station$latitude) + 0.02))
 
 # get the streets geometry
 austin_streets <- extract_osm_objects(key = 'highway', bbox = austin_bbox, return_type = 'line', sf = TRUE, geom_only = TRUE)
@@ -54,7 +58,7 @@ print(austin_map)
 #     route <- osrmRoute(src = as.numeric(station[i, .(station_id, longitude, latitude)]),
 #                        dst = as.numeric(station[j, .(station_id, longitude, latitude)]),
 #                        sp = TRUE)
-#     route <- sf::st_as_sf(route)
+#     route <- st_as_sf(route)
 #     if (exists("shortest_path")) {
 #       shortest_path <- rbind(shortest_path, route)
 #     } else {
@@ -75,10 +79,6 @@ austin_map <- add_osm_objects(map = austin_map, obj = shortest_path, col = 'dodg
 # plot the map
 print(austin_map)
 
-
-shortest_path <- osrmRoute(src = as.numeric(station[1, .(station_id, longitude, latitude)]),
-                           dst = as.numeric(station[2, .(station_id, longitude, latitude)]),
-                           sp = TRUE)
 
 
 
