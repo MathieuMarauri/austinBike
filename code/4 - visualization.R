@@ -26,6 +26,9 @@ trips <- readRDS('data/processed/trips.rds')
 trips <- trips[, .(count = uniqueN(trip_id)), 
                by = list(hour_of_day, start_station_id, end_station_id)]
 
+# average number of trips by hour (used to display an histogram on the map)
+hourly_trips <- trips[!is.na(hour_of_day), .(count = sum(count)), by = hour_of_day]
+
 # import stations coordinates
 station <- readRDS('data/processed/stations.rds')
 
@@ -36,7 +39,7 @@ station <- readRDS('data/processed/stations.rds')
 
 # austin bbox dereived from min and max of station longitude and latitude
 austin_bbox <- get_bbox(latlon = c(min(station$longitude) - 0.02, 
-                                   min(station$latitude) - 0.02, 
+                                   min(station$latitude) - 0.015, 
                                    max(station$longitude) + 0.02, 
                                    max(station$latitude) + 0.02))
 
@@ -47,7 +50,7 @@ austin_streets <- extract_osm_objects(key = 'highway',
                                       sf = TRUE, 
                                       geom_only = TRUE)
 
-# base map
+# base map with streets and stations
 austin_map <- osm_basemap(bbox = austin_bbox, bg = 'gray20')
 austin_map <- add_osm_objects(map = austin_map, 
                               obj = austin_streets, 
@@ -106,63 +109,89 @@ trips <- merge(x = trips,
                by = 'id',
                all = FALSE)
 
-# creation of a color vector to pass to add_osm_object. First count is
-# discretized and then a color palette is used to as levels.
-createPalette <- colorRampPalette(c("dodgerblue", "white"))
-trips$color <- discretize(x = trips$count, 
-                          method = 'interval', 
-                          categories = 10, 
-                          labels = createPalette(10))
+# creation of a size vector to pass to add_osm_object. 
+
+#' 
+#' This function changes the range of values of a numeric vector.
+#' 
+changeRange <- function(x, min, max){
+  result <- (((x - min(x)) * (max - min)) / (max(x) - min(x))) + min
+  return(result)
+}
+
+trips[, size := changeRange(count, min = 0.5, max = 4)]
 
 # clena trips table and convert to sf object
-trips <- trips[, .(start_station_id, end_station_id, hour_of_day, color, geometry)]
-trips <- st_as_sf(trips)
+trips <- trips[, .(start_station_id, end_station_id, hour_of_day, size, count, geometry)]
+trips_sf <- st_as_sf(trips)
 
 # clean session
-rm(createPalette, shortest_path)
+rm(changeRange, shortest_path)
 
 
 # Evolving map ------------------------------------------------------------
 
 # create one frame by hour. Add paths by color because ad_osm_objects accepts
 # only one value as color argument
-img <- image_graph(600, 340, res = 96)
-lapply(X = unique(trips$hour_of_day), 
-       FUN = function(hour){
-         data <- trips[trips$hour_of_day == hour, ]
-         map <- austin_map
-         for (color in unique(data$color)) {
-           object <- data[data$color == color,]
-           map <- add_osm_objects(map = map,
-                                  obj = object,
-                                  col = color)
-         }
-         print(map)
-       })
+img <- image_graph(width = 1200, height = 680, res = 96)
+out <- lapply(X = sort(unique(trips_sf$hour_of_day)), 
+              FUN = function(hour){
+                cat(hour)
+                # add path to the map by level of color
+                data <- trips_sf[trips_sf$hour_of_day == hour, ]
+                data <- data[!is.na(data$start_station_id), ]
+                map <- austin_map
+                for (size in unique(data$size)) {
+                  data_size <- data[data$size == size,]
+                  data_size <- data_size[!is.na(data_size$start_station_id), ]
+                  map <- add_osm_objects(map = map,
+                                         obj = data_size,
+                                         col = 'dodgerblue3',
+                                         size = size)
+                }
+                # add stations and hour to the plot
+                map <- map +
+                  geom_point(data = station, mapping = aes(x = longitude, y = latitude), 
+                             colour = 'darkgoldenrod1') +
+                  geom_text(data = data.frame(x = min(station$longitude) - 0.01,
+                                              y = min(station$latitude) - 0.01,
+                                              label = hour), 
+                            mapping = aes(x = x, 
+                                          y = y, 
+                                          label = paste0(label, ':00')), 
+                            colour = 'white',
+                            size = 12)
+                # add histogram of average number of trips by hour
+                hist_data <- hourly_trips[, .(hour_of_day, count, color = factor(ifelse(hour_of_day == hour, 1, 0)))]
+                hist_grob <- ggplotGrob(ggplot(data = hist_data, 
+                                               mapping = aes(x = hour_of_day, y = count, fill = color)) + 
+                                          geom_bar(stat = 'identity') + 
+                                          labs(x = 'Hour of the day', 
+                                               y = 'Number of trips') + 
+                                          scale_fill_manual(breaks = c(0, 1), values = c('dodgerblue3', 'coral3')) + 
+                                          theme(legend.position = 'none',
+                                                plot.background = element_rect(fill = 'transparent', color = NA),
+                                                panel.background = element_rect(fill = 'transparent', color = NA),
+                                                axis.title = element_blank(),
+                                                axis.text = element_blank(),
+                                                axis.ticks = element_blank(),
+                                                panel.grid = element_blank()))
+                map <- map + 
+                  labs(title = 'Bike trips by hour in Austin, Texas, US') + 
+                  theme(plot.title = element_text(size = 20)) +
+                  annotation_custom(grob = hist_grob, 
+                                    xmin = min(station$longitude) + 0.04, 
+                                    xmax = max(station$longitude) + 0.02, 
+                                    ymin = max(station$latitude) + 0.005, 
+                                    ymax = max(station$latitude) + 0.02)
+                print(map)
+              })
 dev.off()
 animation <- image_animate(img, fps = 2)
 print(animation)
 
-hour <- 1
-data <- trips[trips$hour_of_day == hour, ]
-# map <- austin_map
-for (color in unique(data$color)) {
-  austin_map <- add_osm_objects(map = austin_map,
-                                obj = data[data$color == color,],
-                                col = color)
-}
-print(austin_map)
+# save result as gif and clean session
+image_write(animation, "output/hourly_trips.gif")
+rm(out, img, animation)
 
-# some color are not present for some hour so a condition should be added before
-# add_osm_objects
 
-# add paths by color because ad_osm_objects accepts only one value as color
-# argument
-for (color in unique(trips$color)) {
-  austin_map <- add_osm_objects(map = austin_map,
-                                obj = trips[trips$color == color,],
-                                col = color)
-}
-
-# plot the map
-print(austin_map)
