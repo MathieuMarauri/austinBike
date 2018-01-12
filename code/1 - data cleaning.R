@@ -32,7 +32,7 @@ qualityCheck(data = stations,
              file = 'output/audit/stations.xlsx',
              verbose = FALSE)
 
-saveRDS(stations, 'data/processed/stations.rds')
+saveRDS(stations, 'data/clean/stations.rds')
 rm(stations)
 
 
@@ -82,7 +82,7 @@ setcolorder(trips, c('trip_id', 'start_station_id', 'end_station_id', 'start_tim
 qualityCheck(data = trips,
              file = 'output/audit/trips.xlsx')
 
-saveRDS(trips, 'data/processed/trips.rds')
+saveRDS(trips, 'data/clean/trips.rds')
 rm(trips)
 
 
@@ -143,6 +143,6 @@ weather <- splitstackshape::cSplit_e(data = weather,
 qualityCheck(data = weather,
              file = 'output/audit/weather.xlsx')
 
-saveRDS(weather, 'data/processed/weather.rds')
+saveRDS(weather, 'data/clean/weather.rds')
 rm(weather, cols)
 
