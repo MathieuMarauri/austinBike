@@ -31,13 +31,17 @@ for(name in task_names) {
          value = readRDS(paste0('data/tasks/', name, '.rds')))
 }
 
-# What are the available learners for the datasets with missing values? 
+# What are the available learners for the datasets with missing values? A list
+# of all the available learners for a regression task can be found here:
+# https://mlr-org.github.io/mlr-tutorial/release/html/integrated_learners/index.html#regression-64
 learners_missing <- listLearners(obj = task)
 
 # What are the available learners for the datasets without missing values?
 learners_imp <- listLearners(obj = task_imp)
 
-# What are the available performance measures?
+# What are the available performance measures? See
+# https://mlr-org.github.io/mlr-tutorial/release/html/measures/index.html#regression
+# for some precisions on the measures
 listMeasures(obj = task)
 
 # clean session
