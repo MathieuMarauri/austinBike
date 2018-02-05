@@ -8,7 +8,13 @@ library('data.table')
 library('stringi')
 library('mlr')
 
-# Dataset preparation -----------------------------------------------------
+
+# Initiate modelisation ---------------------------------------------------
+
+# Import data and keep one variable by indicator (wind, temperature, ...) and
+# remove rows with missing values. Construct the task and list the available
+# learners and performance measures. A train set and a training set are manually
+# constructed.
 
 # load data
 trips <- readRDS('data/trips_model.rds')
@@ -20,8 +26,8 @@ trips <- trips[, .SD, .SDcols = keep_cols]
 # remove rows with NA
 trips <- trips[complete.cases(trips)]
 
-
-# Initiate modelisation ---------------------------------------------------
+# coerce to data frame so task does not have to do it
+trips <- as.data.frame(trips)
 
 # create the task: regression task with target column 'count'
 task <- makeRegrTask(id = 'trips', data = trips, target = 'count')
@@ -29,13 +35,26 @@ task <- makeRegrTask(id = 'trips', data = trips, target = 'count')
 # what are the avialable learner for the prediction task?
 list_learners <- listLearners(obj = task)
 
-# what are the availbale performance measures?
+# what are the availbale performance measures? See
+# https://mlr-org.github.io/mlr-tutorial/release/html/measures/index.html#regression
+# for some precisions on the measures
 listMeasures(obj = task)
 
 # training and test set
 set.seed(123456)
 train_set <- sample(nrow(trips), (3 * nrow(trips)) / 4)
 test_set <- setdiff(1:nrow(trips), train_set)
+
+# clean session
+rm(keep_cols, trips)
+
+
+# Initial benchark on available learners ----------------------------------
+
+# Some of the available learners are compared regarding several performance
+# measures. It gives a first insight of which learners are the best. The top
+# three are then tuned in following steps.
+
 
 
 # Generalized linear model ------------------------------------------------
